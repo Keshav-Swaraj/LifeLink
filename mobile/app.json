@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "LifeLink",
+    "slug": "lifelink",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0F"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.lifelink.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "LifeLink needs microphone access to record your voice description of the emergency.",
+        "NSCameraUsageDescription": "LifeLink needs camera access to capture scene photos for AI triage.",
+        "NSLocationWhenInUseUsageDescription": "LifeLink needs your location to send emergency responders to your exact position.",
+        "NSLocationAlwaysUsageDescription": "LifeLink uses location to dispatch responders even when the app is in the background."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0A0F"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.lifelink.app",
+      "permissions": [
+        "RECORD_AUDIO",
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_NETWORK_STATE",
+        "INTERNET"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "LifeLink needs camera access to capture scene photos for AI triage."
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "LifeLink needs microphone access to record your voice description."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "LifeLink needs location to dispatch responders to you."
+        }
+      ]
+    ]
+  }
+}
