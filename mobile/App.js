@@ -8,6 +8,7 @@ import { View, ActivityIndicator, StyleSheet, Modal } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from './src/lib/supabase';
 import { initializeNotifications } from './src/services/notifications';
+import SplashScreen from './src/screens/SplashScreen';
 
 // ── Auth Screens (Member 4) ──────────────────────────────────────
 import WelcomeScreen from './src/screens/WelcomeScreen';
@@ -21,6 +22,8 @@ import UnifiedSignupScreen from './src/screens/UnifiedSignupScreen';
 
 // ── Victim Screens (Member 1) ────────────────────────────────────
 import SOSScreen from './src/screens/SOSScreen';
+import UserProfileScreen from './src/screens/UserProfileScreen';
+import ActiveSOSScreen from './src/screens/ActiveSOSScreen';
 
 // ── Responder Screens (Members 2 + 4) ───────────────────────────
 import ResponderDashboard from './src/screens/ResponderDashboard';
@@ -42,6 +45,7 @@ function RootStack() {
   const [bannerPayload, setBannerPayload] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalEmergency, setModalEmergency] = useState(null);
+  const [splashFinished, setSplashFinished] = useState(false);
 
   // Determine routing branch
   const isMedical = profile?.role === 'medical_professional';
@@ -107,11 +111,12 @@ function RootStack() {
     },
   }), []);
 
-  if (loading) {
+  if (loading || !splashFinished) {
     return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#E63946" />
-      </View>
+      <SplashScreen 
+        isAuthLoading={loading} 
+        onFinish={() => setSplashFinished(true)} 
+      />
     );
   }
 
@@ -143,7 +148,11 @@ function RootStack() {
         ) : (
           // ── Regular user OR new medical signup (onboarding pending) ──
           // Both land on the SOS home screen after signup.
-          <Stack.Screen name="SOS" component={SOSScreen} />
+          <>
+            <Stack.Screen name="SOS" component={SOSScreen} />
+            <Stack.Screen name="UserProfileScreen" component={UserProfileScreen} />
+            <Stack.Screen name="ActiveSOSScreen" component={ActiveSOSScreen} />
+          </>
         )}
       </Stack.Navigator>
 

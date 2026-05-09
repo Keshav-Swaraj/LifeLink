@@ -1,97 +1,130 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
   Animated,
-  Dimensions,
-  Platform,
+  Alert,
+  Vibration,
 } from 'react-native';
-import { Audio } from 'expo-av';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
-import * as FileSystem from 'expo-file-system/legacy';
-import NetInfo from '@react-native-community/netinfo';
-import { runAITriage } from '../lib/gemini';
-import { submitEmergency, uploadPhotos } from '../services/emergencyService';
-import { syncQueue, clearQueue } from '../services/offlineQueue';
+import { useCameraPermissions } from 'expo-camera';
+import { Audio } from 'expo-av';
+import { useNavigation } from '@react-navigation/native';
+import MapView, { Marker, Circle, UrlTile, PROVIDER_DEFAULT } from 'react-native-maps';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import 'react-native-url-polyfill/auto';
 
-const { width } = Dimensions.get('window');
-
-const SEVERITY_CONFIG = {
-  red:     { color: '#FF2D55', label: 'CRITICAL', emoji: '🔴' },
-  orange:  { color: '#FF6B00', label: 'URGENT',   emoji: '🟠' },
-  yellow:  { color: '#FFD60A', label: 'MODERATE', emoji: '🟡' },
-  unknown: { color: '#8E8E93', label: 'ANALYZING',emoji: '⚪' },
-};
+const MAP_DARK_STYLE = [
+  { "elementType": "geometry", "stylers": [{ "color": "#080808" }] },
+  { "elementType": "labels.icon", "stylers": [{ "visibility": "off" }] },
+  { "elementType": "labels.text.fill", "stylers": [{ "color": "#4a4a4a" }] },
+  { "elementType": "labels.text.stroke", "stylers": [{ "color": "#080808" }] },
+  { "featureType": "administrative", "elementType": "geometry", "stylers": [{ "color": "#111111" }] },
+  { "featureType": "poi", "elementType": "labels.text.fill", "stylers": [{ "color": "#3d3d3d" }] },
+  { "featureType": "poi.park", "elementType": "geometry", "stylers": [{ "color": "#0a0a0a" }] },
+  { "featureType": "road", "elementType": "geometry.fill", "stylers": [{ "color": "#161616" }] },
+  { "featureType": "road.arterial", "elementType": "geometry", "stylers": [{ "color": "#1e1e1e" }] },
+  { "featureType": "road.highway", "elementType": "geometry", "stylers": [{ "color": "#242424" }] },
+  { "featureType": "road.highway.controlled_access", "elementType": "geometry", "stylers": [{ "color": "#2a2a2a" }] },
+  { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#000000" }] }
+];
 
 export default function SOSScreen() {
-  const { logout } = useAuth();
-  // Permissions
+  const { profile } = useAuth();
+  const navigation = useNavigation();
+
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [micGranted, setMicGranted]   = useState(false);
-  const [locGranted, setLocGranted]   = useState(false);
-  const [consentGiven, setConsentGiven] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [location, setLocation] = useState(null);
+  
+  const [initialRegion] = useState({
+    latitude: 20.5937,
+    longitude: 78.9629,
+    latitudeDelta: 10,
+    longitudeDelta: 10,
+  });
 
-  // State machine
-  const [phase, setPhase] = useState('idle'); 
-  // idle → consent → recording → capturing → analyzing → result | error
-
-  const [recording, setRecording]     = useState(null);
-  const [transcript, setTranscript]   = useState('');
-  const [photos, setPhotos]           = useState([]);
-  const [location, setLocation]       = useState(null);
-  const [triageResult, setTriageResult] = useState(null);
-  const [isOnline, setIsOnline]       = useState(true);
-  const [statusMsg, setStatusMsg]     = useState('');
-
-  // Camera ref for burst capture
-  const cameraRef = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const mapRef = useRef(null);
 
-  // Monitor connectivity
   useEffect(() => {
-    const unsub = NetInfo.addEventListener(state => {
-      const online = state.isConnected && state.isInternetReachable;
-      setIsOnline(!!online);
-      if (online) syncQueue().catch(() => {});
-    });
-    return () => unsub();
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        try {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          setLocation(loc);
+          
+          setTimeout(() => {
+            if (mapRef.current) {
+              mapRef.current.animateToRegion({
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude,
+                latitudeDelta: 0.05,
+                longitudeDelta: 0.05,
+              }, 2500); 
+            }
+          }, 800);
+
+        } catch (err) {
+          console.log("Could not fetch initial location", err);
+        }
+      }
+    })();
   }, []);
 
-  // Pulse animation for SOS button
-  useEffect(() => {
-    if (phase === 'idle') {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.08, duration: 900, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1,    duration: 900, useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
-      pulseAnim.stopAnimation();
-      pulseAnim.setValue(1);
-    }
-  }, [phase]);
+  const mockUsers = useMemo(() => {
+    const users = [];
+    let idCounter = 0;
 
-  // ─── CONSENT ─────────────────────────────────────────────────────────────
+    if (location) {
+      for (let i = 0; i < 5; i++) {
+        users.push({
+          id: idCounter++,
+          lat: location.coords.latitude + (Math.random() - 0.5) * 0.08,
+          lng: location.coords.longitude + (Math.random() - 0.5) * 0.08,
+        });
+      }
+    }
+
+    const bangaloreLat = 12.9716;
+    const bangaloreLng = 77.5946;
+    for (let i = 0; i < 40; i++) {
+      users.push({
+        id: idCounter++,
+        lat: bangaloreLat + (Math.random() - 0.5) * 0.3,
+        lng: bangaloreLng + (Math.random() - 0.5) * 0.3,
+      });
+    }
+
+    for (let i = 0; i < 30; i++) {
+      users.push({
+        id: idCounter++,
+        lat: (Math.random() - 0.5) * 160,
+        lng: (Math.random() - 0.5) * 360,
+      });
+    }
+
+    return users;
+  }, [location]);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.08, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1,    duration: 900, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [pulseAnim]);
 
   async function handleSOSPress() {
-    // Request all permissions upfront with explanation
     const micStatus = await Audio.requestPermissionsAsync();
     const locStatus = await Location.requestForegroundPermissionsAsync();
     const camStatus = await requestCameraPermission();
 
     const allGranted = micStatus.granted && locStatus.granted && camStatus.granted;
-
-    setMicGranted(micStatus.granted);
-    setLocGranted(locStatus.granted);
 
     if (!allGranted) {
       Alert.alert(
@@ -102,424 +135,142 @@ export default function SOSScreen() {
       return;
     }
 
-    setConsentGiven(true);
-    setPhase('consent');
+    Vibration.vibrate([0, 500, 200, 500]);
+
+    // Navigate to the dedicated Active SOS Screen
+    navigation.navigate('ActiveSOSScreen');
   }
-
-  async function handleConfirmSOS() {
-    setPhase('recording');
-    await startRecording();
-  }
-
-  // ─── RECORDING ───────────────────────────────────────────────────────────
-
-  async function startRecording() {
-    setStatusMsg('🎙️ Speak now — describe the emergency...');
-    try {
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording: rec } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      setRecording(rec);
-
-      // Auto-stop after 10 seconds
-      setTimeout(async () => {
-        await stopRecording(rec);
-      }, 10000);
-    } catch (err) {
-      console.error('Recording failed:', err);
-      setPhase('error');
-      setStatusMsg('❌ Microphone error: ' + err.message);
-    }
-  }
-
-  async function stopRecording(rec) {
-    const activeRec = rec || recording;
-    if (!activeRec) return;
-    try {
-      const uri = activeRec.getURI();
-      await activeRec.stopAndUnloadAsync();
-      setRecording(null);
-      
-      // Store the URI for later processing
-      await capturePhotosAndLocation(uri);
-    } catch (err) {
-      if (err.message && !err.message.includes('already been unloaded')) {
-        console.error('Stop recording error:', err);
-      }
-    }
-  }
-
-  // ─── BURST PHOTOS + LOCATION ──────────────────────────────────────────────
-
-  async function capturePhotosAndLocation(audioUri) {
-    setPhase('capturing');
-    setStatusMsg('📸 Capturing scene photos...');
-
-    const capturedPhotos = [];
-
-    try {
-      // Burst capture: 6 photos
-      for (let i = 0; i < 6; i++) {
-        if (cameraRef.current) {
-          const photo = await cameraRef.current.takePictureAsync({
-            quality: 0.6,
-            base64: true,
-            skipProcessing: true,
-          });
-          capturedPhotos.push({ uri: photo.uri, base64: photo.base64, mimeType: 'image/jpeg' });
-          setStatusMsg(`📸 Captured ${i + 1}/6 photos...`);
-          await new Promise(r => setTimeout(r, 400));
-        }
-      }
-    } catch (err) {
-      console.warn('Photo capture error:', err.message);
-    }
-
-    setPhotos(capturedPhotos);
-
-    // Get location
-    let loc = null;
-    try {
-      loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setLocation(loc);
-    } catch (err) {
-      console.warn('Location error:', err.message);
-    }
-
-    await runTriage(audioUri, capturedPhotos, loc);
-  }
-
-  // ─── AI TRIAGE ───────────────────────────────────────────────────────────
-
-  async function runTriage(audioUri, capturedPhotos, loc) {
-    setPhase('analyzing');
-    setStatusMsg('🧠 AI analyzing emergency...');
-
-    try {
-      // Read audio file as base64
-      let audioBase64 = null;
-      if (audioUri) {
-        audioBase64 = await FileSystem.readAsStringAsync(audioUri, {
-          encoding: 'base64',
-        });
-      }
-
-      const audioInput = audioBase64 ? { 
-        base64: audioBase64, 
-        mimeType: Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4' 
-      } : null;
-
-      const imageInputs = capturedPhotos.map(p => ({ base64: p.base64, mimeType: p.mimeType }));
-      
-      const result = await runAITriage(audioInput, imageInputs);
-      setTriageResult(result);
-      setTranscript(result.transcript ?? '');
-
-      await submitPacket(result, capturedPhotos, loc);
-    } catch (err) {
-      console.error('Triage error:', err);
-      setPhase('error');
-      setStatusMsg('❌ AI analysis failed: ' + err.message);
-    }
-  }
-
-  // ─── SUBMIT ───────────────────────────────────────────────────────────────
-
-  async function submitPacket(triageData, capturedPhotos, loc) {
-    setStatusMsg('📡 Sending emergency alert...');
-
-    const clientId = `sos_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-
-    // Upload photos if online
-    let photoUrls = [];
-    if (isOnline && capturedPhotos.length > 0) {
-      try {
-        photoUrls = await uploadPhotos(capturedPhotos.map(p => p.uri), clientId);
-      } catch (err) {
-        console.warn('Photo upload failed:', err.message);
-      }
-    }
-
-    // Reverse geocode GPS → human-readable address
-    let address = null;
-    if (loc?.coords) {
-      try {
-        const [place] = await Location.reverseGeocodeAsync({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        });
-        if (place) {
-          address = [
-            place.name,
-            place.street,
-            place.district,
-            place.city,
-            place.region,
-          ].filter(Boolean).join(', ');
-        }
-      } catch (err) {
-        console.warn('Reverse geocode failed:', err.message);
-      }
-    }
-
-    const packet = {
-      client_id:          clientId,
-      latitude:           loc?.coords?.latitude  ?? 0,
-      longitude:          loc?.coords?.longitude ?? 0,
-      address,
-      // Use triageData.transcript directly — avoid stale React state
-      voice_transcript:   triageData.transcript ?? '',
-      photo_urls:         photoUrls,
-      severity:           triageData.severity,
-      ai_summary:         triageData.summary,
-      ai_injuries:        triageData.injuries,
-      ai_risks:           triageData.risks,
-      ai_recommendations: triageData.recommendations,
-      ai_raw_response:    triageData.raw,
-      status:             'pending',
-    };
-
-    const outcome = await submitEmergency(packet, isOnline);
-
-    if (outcome.queued) {
-      setStatusMsg('📶 Saved offline. Will auto-sync when connected.');
-    } else {
-      setStatusMsg('✅ Emergency alert sent successfully!');
-    }
-
-    setPhase('result');
-  }
-
-  // ─── RESET ────────────────────────────────────────────────────────────────
-
-  function resetSOS() {
-    setPhase('idle');
-    setTranscript('');
-    setPhotos([]);
-    setLocation(null);
-    setTriageResult(null);
-    setStatusMsg('');
-    setConsentGiven(false);
-  }
-
-  // ─── RENDER ───────────────────────────────────────────────────────────────
-
-  const severity = triageResult ? SEVERITY_CONFIG[triageResult.severity] : null;
 
   return (
-    <View style={styles.container}>
-      {/* Connectivity banner */}
-      {!isOnline && (
-        <View style={styles.offlineBanner}>
-          <Text style={styles.offlineBannerText}>📶 OFFLINE MODE — SOS will be queued locally</Text>
-        </View>
-      )}
+    <View style={[styles.container, { backgroundColor: isDarkMode ? '#0A0A0F' : '#F2F2F7' }]}>
+      <MapView ref={mapRef} style={styles.map} provider={PROVIDER_DEFAULT} customMapStyle={isDarkMode ? MAP_DARK_STYLE : []} initialRegion={initialRegion} showsUserLocation={false} showsMyLocationButton={false} showsCompass={false}>
+        <UrlTile urlTemplate={isDarkMode ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"} maximumZ={19} flipY={false} />
+        {location ? <Circle center={{ latitude: location.coords.latitude, longitude: location.coords.longitude }} radius={2500} strokeColor="#0A84FF" strokeWidth={2} lineDashPattern={[6, 6]} fillColor={isDarkMode ? "rgba(10, 132, 255, 0.03)" : "rgba(10, 132, 255, 0.08)"} /> : null}
+        {location ? <Marker coordinate={{ latitude: location.coords.latitude, longitude: location.coords.longitude }}><View style={styles.userLocationMarker}><View style={styles.userLocationInner} /></View></Marker> : null}
+        {mockUsers.map(u => (
+          <Marker key={u.id} coordinate={{ latitude: u.lat, longitude: u.lng }}><View style={styles.mockUserMarker}><View style={styles.mockUserMarkerInner} /></View></Marker>
+        ))}
+      </MapView>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
-        {/* Header */}
-        <View style={styles.headerRow}>
+      <View style={[styles.opaqueHeader, { backgroundColor: isDarkMode ? '#0A0A0F' : '#FFFFFF', borderBottomColor: isDarkMode ? '#2C2C2E' : '#E5E5EA' }]}>
+        <View style={styles.headerLeft}>
+          <Ionicons name="pulse" size={42} color="#FF2D55" style={{ marginRight: 10, marginTop: 4 }} />
           <View>
             <Text style={styles.appTitle}>LifeLink</Text>
-            <Text style={styles.appSubtitle}>Golden Hour, Powered by AI</Text>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {__DEV__ && (
-              <TouchableOpacity
-                style={[styles.logoutBtn, { backgroundColor: '#1C1C1E' }]}
-                onPress={async () => { await clearQueue(); Alert.alert('Queue cleared'); }}
-              >
-                <Text style={[styles.logoutBtnText, { color: '#FF9500', fontSize: 11 }]}>Clear Queue</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-              <Text style={styles.logoutBtnText}>Sign Out</Text>
-            </TouchableOpacity>
+            <Text style={styles.appSubtitle}>Golden Hour</Text>
           </View>
         </View>
+        <TouchableOpacity style={styles.userProfileBtn} onPress={() => navigation.navigate('UserProfileScreen')}>
+          <Ionicons name="person-circle" size={44} color={isDarkMode ? "#FFF" : "#1C1C1E"} />
+          <Text style={[styles.userFirstName, { color: isDarkMode ? '#E5E5EA' : '#1C1C1E' }]}>{profile?.full_name ? profile.full_name.split(' ')[0] : 'User'}</Text>
+        </TouchableOpacity>
+      </View>
 
-        {/* ── IDLE: Big SOS Button ── */}
-        {phase === 'idle' && (
-          <View style={styles.centerBlock}>
-            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-              <TouchableOpacity style={styles.sosButton} onPress={handleSOSPress} activeOpacity={0.85}>
-                <Text style={styles.sosButtonText}>SOS</Text>
-              </TouchableOpacity>
-            </Animated.View>
-            <Text style={styles.tapHint}>Tap to trigger emergency alert</Text>
-          </View>
-        )}
+      <View style={styles.bottomCenterBlock}>
+        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+          <TouchableOpacity style={styles.sosButton} onPress={handleSOSPress} activeOpacity={0.85}>
+            <Text style={styles.sosButtonText}>SOS</Text>
+          </TouchableOpacity>
+        </Animated.View>
+        <Text style={styles.tapHint}>Tap to trigger emergency alert</Text>
+      </View>
 
-        {/* ── CONSENT ── */}
-        {phase === 'consent' && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>⚠️ Confirm Emergency</Text>
-            <Text style={styles.cardBody}>
-              LifeLink will:{'\n\n'}
-              🎙️ Record your voice (10 seconds){'\n'}
-              📸 Capture 6 scene photos{'\n'}
-              📍 Share your GPS location{'\n\n'}
-              This data will be sent to verified medical responders and hospitals nearby.
-            </Text>
-            <TouchableOpacity style={styles.confirmButton} onPress={handleConfirmSOS}>
-              <Text style={styles.confirmButtonText}>I Confirm — Send SOS</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={resetSOS}>
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ── RECORDING / CAPTURING / ANALYZING ── */}
-        {['recording', 'capturing', 'analyzing'].includes(phase) && (
-          <View style={styles.card}>
-            <ActivityIndicator size="large" color="#FF2D55" style={{ marginBottom: 16 }} />
-            <Text style={styles.statusText}>{statusMsg}</Text>
-
-            {/* Live camera preview */}
-            {['recording', 'capturing'].includes(phase) && (
-              <View style={styles.cameraContainer}>
-                <CameraView
-                  ref={cameraRef}
-                  style={styles.camera}
-                  facing="back"
-                />
-              </View>
-            )}
-
-            {phase === 'recording' && (
-              <TouchableOpacity style={styles.stopButton} onPress={() => stopRecording(null)}>
-                <Text style={styles.stopButtonText}>⏹ Stop Recording Early</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        {/* ── RESULT ── */}
-        {phase === 'result' && triageResult && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Emergency Alert Sent</Text>
-            <Text style={styles.statusText}>{statusMsg}</Text>
-
-            {/* Severity Badge */}
-            <View style={[styles.severityBadge, { backgroundColor: severity?.color }]}>
-              <Text style={styles.severityEmoji}>{severity?.emoji}</Text>
-              <Text style={styles.severityLabel}>{severity?.label}</Text>
-            </View>
-
-            {/* AI Summary and Transcript */}
-            <Text style={styles.sectionTitle}>AI Summary</Text>
-            <Text style={styles.cardBody}>{triageResult.summary}</Text>
-
-            {triageResult.transcript && (
-              <>
-                <Text style={styles.sectionTitle}>Voice Transcript</Text>
-                <Text style={[styles.cardBody, { fontStyle: 'italic' }]}>"{triageResult.transcript}"</Text>
-              </>
-            )}
-
-            {triageResult.injuries?.length > 0 && (
-              <>
-                <Text style={styles.sectionTitle}>Detected Injuries</Text>
-                {triageResult.injuries.map((inj, i) => (
-                  <Text key={i} style={styles.listItem}>• {inj}</Text>
-                ))}
-              </>
-            )}
-
-            {triageResult.recommendations?.length > 0 && (
-              <>
-                <Text style={styles.sectionTitle}>First Aid Recommendations</Text>
-                {triageResult.recommendations.map((rec, i) => (
-                  <Text key={i} style={styles.listItem}>• {rec}</Text>
-                ))}
-              </>
-            )}
-
-            <TouchableOpacity style={styles.resetButton} onPress={resetSOS}>
-              <Text style={styles.resetButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ── ERROR ── */}
-        {phase === 'error' && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Something went wrong</Text>
-            <Text style={styles.cardBody}>{statusMsg}</Text>
-            <TouchableOpacity style={styles.resetButton} onPress={resetSOS}>
-              <Text style={styles.resetButtonText}>Try Again</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-      </ScrollView>
+      <TouchableOpacity style={[styles.themeToggleBtn, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' }]} onPress={() => setIsDarkMode(!isDarkMode)}>
+        <Ionicons name={isDarkMode ? "sunny" : "moon"} size={26} color={isDarkMode ? "#FFF" : "#1C1C1E"} />
+      </TouchableOpacity>
     </View>
   );
 }
 
-// ─── STYLES ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0F',
   },
-  offlineBanner: {
-    backgroundColor: '#FF6B00',
-    paddingVertical: 8,
-    alignItems: 'center',
+  map: {
+    ...StyleSheet.absoluteFillObject,
   },
-  offlineBannerText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  scroll: {
-    flexGrow: 1,
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingBottom: 40,
+  opaqueHeader: {
+    paddingTop: 50,
+    paddingBottom: 15,
     paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 20,
+    borderBottomWidth: 1,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   appTitle: {
-    fontSize: 36,
+    fontSize: 26,
     fontWeight: '900',
     color: '#FF2D55',
-    letterSpacing: 2,
+    letterSpacing: 1,
   },
   appSubtitle: {
     fontSize: 13,
     color: '#8E8E93',
     letterSpacing: 1,
+    fontWeight: '600',
   },
-  headerRow: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  userProfileBtn: {
     alignItems: 'center',
-    marginBottom: 40,
+    justifyContent: 'center',
   },
-  logoutBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#2C2C2E',
-    borderRadius: 8,
-  },
-  logoutBtnText: {
-    color: '#FF2D55',
+  userFirstName: {
+    fontSize: 12,
     fontWeight: '700',
-    fontSize: 14,
+    marginTop: 2,
   },
-  centerBlock: {
+  userLocationMarker: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FFF',
     alignItems: 'center',
-    marginTop: 20,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  userLocationInner: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#D97706',
+  },
+  mockUserMarker: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(52, 199, 89, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mockUserMarkerInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#34C759',
+    borderWidth: 1,
+    borderColor: '#FFF',
+  },
+  bottomCenterBlock: {
+    position: 'absolute',
+    bottom: 50,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
   },
   sosButton: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
     backgroundColor: '#FF2D55',
     alignItems: 'center',
     justifyContent: 'center',
@@ -528,131 +279,37 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 30,
     elevation: 20,
+    borderWidth: 4,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   sosButtonText: {
-    fontSize: 48,
+    fontSize: 42,
     fontWeight: '900',
     color: '#fff',
     letterSpacing: 4,
   },
   tapHint: {
-    marginTop: 24,
-    fontSize: 14,
-    color: '#636366',
-  },
-  card: {
-    width: '100%',
-    backgroundColor: '#1C1C1E',
-    borderRadius: 20,
-    padding: 24,
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#2C2C2E',
-  },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    marginBottom: 12,
-  },
-  cardBody: {
+    marginTop: 20,
     fontSize: 15,
-    color: '#AEAEB2',
-    lineHeight: 22,
-  },
-  sectionTitle: {
-    fontSize: 13,
+    color: '#1C1C1E',
     fontWeight: '700',
-    color: '#636366',
-    marginTop: 16,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  listItem: {
-    fontSize: 14,
-    color: '#AEAEB2',
-    marginBottom: 4,
-    lineHeight: 20,
-  },
-  statusText: {
-    fontSize: 16,
-    color: '#E5E5EA',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  cameraContainer: {
-    width: '100%',
-    height: 200,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
     overflow: 'hidden',
-    marginTop: 16,
   },
-  camera: {
-    flex: 1,
-  },
-  confirmButton: {
-    marginTop: 20,
-    backgroundColor: '#FF2D55',
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  confirmButtonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  cancelButton: {
-    marginTop: 12,
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  cancelButtonText: {
-    color: '#636366',
-    fontSize: 15,
-  },
-  stopButton: {
-    marginTop: 20,
-    borderWidth: 1,
-    borderColor: '#FF2D55',
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  stopButtonText: {
-    color: '#FF2D55',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  severityBadge: {
-    flexDirection: 'row',
+  themeToggleBtn: {
+    position: 'absolute',
+    bottom: 20, // Moved lower
+    right: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
-    paddingVertical: 12,
-    marginVertical: 16,
-    gap: 8,
-  },
-  severityEmoji: {
-    fontSize: 22,
-  },
-  severityLabel: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#fff',
-    letterSpacing: 2,
-  },
-  resetButton: {
-    marginTop: 24,
-    backgroundColor: '#2C2C2E',
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  resetButtonText: {
-    color: '#AEAEB2',
-    fontSize: 16,
-    fontWeight: '700',
+    zIndex: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(150,150,150,0.3)',
   },
 });

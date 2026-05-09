@@ -30,6 +30,9 @@ import UserLoginScreen from '../screens/user/UserLoginScreen';
 import UserSignupScreen from '../screens/user/UserSignupScreen';
 import UnifiedSignupScreen from '../screens/UnifiedSignupScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
+import SOSScreen from '../screens/SOSScreen';
+import ActiveSOSScreen from '../screens/ActiveSOSScreen';
+import ActiveResponseScreen from '../screens/ActiveResponseScreen';
 
 // ── Route Map ─────────────────────────────────────────────────
 // Export this so other screens can import it for type-safe navigation.
@@ -50,8 +53,22 @@ export type RootStackParamList = {
   // Unified Signup (both roles)
   UnifiedSignup: { role: 'user' | 'medical_professional' };
 
-  // Main App (placeholder — replace with your navigator)
+  // Main App
   MainApp: undefined;
+  SOSScreen: undefined;
+  ActiveSOSScreen: undefined;
+  ActiveSOSScreenDirect: undefined;
+  ActiveResponseScreen: {
+    emergencyId: string;
+    aiSummary?: string;
+    photoUrls?: string[];
+    address?: string;
+    victimLatitude?: number;
+    victimLongitude?: number;
+  };
+  ActiveResponseScreenDirect: any;
+  UserProfileScreen: undefined;
+  ResponderAlertScreen: any;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -110,9 +127,11 @@ const OnboardingStack: React.FC = () => (
 
 // ── Main App Stack (fully authenticated) ─────────────────────
 const AppStack: React.FC = () => (
-  <Stack.Navigator id="AppStack" screenOptions={{ headerShown: false }}>
+  <Stack.Navigator id="AppStack" screenOptions={{ headerShown: false }} initialRouteName="SOSScreen">
+    <Stack.Screen name="SOSScreen" component={SOSScreen} />
+    <Stack.Screen name="ActiveSOSScreen" component={ActiveSOSScreen} />
+    <Stack.Screen name="ActiveResponseScreen" component={ActiveResponseScreen} />
     <Stack.Screen name="MainApp" component={MainPlaceholderScreen} />
-    {/* Other members: add your screens here, or replace this entire stack */}
   </Stack.Navigator>
 );
 

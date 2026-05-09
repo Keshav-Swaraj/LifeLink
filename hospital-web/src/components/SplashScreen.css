@@ -1,0 +1,64 @@
+.splash-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  width: 100vw;
+  background-color: #09090b;
+}
+
+.splash-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-logo-container {
+  width: 90px;
+  height: 90px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.splash-logo-wipe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 0;
+  overflow: hidden;
+  animation: wipe-in 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  display: flex;
+  align-items: center;
+}
+
+/* Ensure the icon itself doesn't shrink when the container width changes */
+.splash-logo-inner {
+  width: 90px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes wipe-in {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+.splash-text {
+  font-size: 56px;
+  font-weight: 900;
+  color: #FF3355;
+  margin-left: 10px;
+  opacity: 0;
+  animation: fade-in 0.8s ease-in forwards;
+  animation-delay: 1s; /* wait for wipe to finish */
+  letter-spacing: 0.5px;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

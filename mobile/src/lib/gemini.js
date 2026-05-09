@@ -8,8 +8,8 @@ if (!apiKey) {
 
 const genAI = new GoogleGenerativeAI(apiKey);
 
-// Gemini 1.5 Flash - supports multimodal (text + images)
-export const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+// gemini-2.0-flash-lite: multimodal, generous free tier, fast
+export const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
 
 /**
  * Runs AI triage on scene images + audio recording.
@@ -24,11 +24,11 @@ You are an emergency medical AI triage assistant. Analyze the following emergenc
 IMPORTANT RULES:
 - Respond ONLY with a valid JSON object.
 - If the photos are completely black/blank and the audio is silent or has no speech, DO NOT invent or hallucinate a scenario.
-- If no emergency is visible or audible, set severity to "unknown", summary to "Media is unclear or no emergency detected.", and leave all arrays empty.
+- If no emergency is visible or audible, set severity to "green", summary to "Media is unclear or no emergency detected.", and leave all arrays empty.
 
 Tasks:
 1. Transcribe what you hear in the audio recording (the "transcript"). If no speech, set to empty string.
-2. Determine Severity level: "red" (life-threatening, immediate), "orange" (serious, urgent), "yellow" (minor, non-urgent), or "unknown" (unclear).
+2. Determine Severity level: "red" (life-threatening, immediate), "orange" (serious, urgent), "yellow" (minor, non-urgent), "green" (no danger/false alarm), or "unknown" (unclear).
 3. Provide a short summary of the emergency (2-3 sentences).
 4. List detected or likely injuries.
 5. List immediate risks if untreated.
@@ -37,7 +37,7 @@ Tasks:
 Respond ONLY with this JSON format, no markdown, no explanation:
 {
   "transcript": "string",
-  "severity": "red" | "orange" | "yellow" | "unknown",
+  "severity": "red" | "orange" | "yellow" | "green" | "unknown",
   "summary": "string",
   "injuries": ["string"],
   "risks": ["string"],
