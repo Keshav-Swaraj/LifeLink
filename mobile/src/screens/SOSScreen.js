@@ -14,6 +14,7 @@ import {
 import { Audio } from 'expo-av';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
+import * as FileSystem from 'expo-file-system';
 import NetInfo from '@react-native-community/netinfo';
 import { runAITriage } from '../lib/gemini';
 import { submitEmergency, uploadPhotos } from '../services/emergencyService';
@@ -134,12 +135,12 @@ export default function SOSScreen() {
     const activeRec = rec || recording;
     if (!activeRec) return;
     try {
+      const uri = activeRec.getURI();
       await activeRec.stopAndUnloadAsync();
       setRecording(null);
-      // Note: Real speech-to-text would use Whisper/Cloud STT API
-      // For demo, we set a placeholder; in production use @react-native-voice/voice
-      setTranscript('Voice description captured.');
-      await capturePhotosAndLocation();
+      
+      // Store the URI for later processing
+      await capturePhotosAndLocation(uri);
     } catch (err) {
       console.error('Stop recording error:', err);
     }
@@ -147,7 +148,7 @@ export default function SOSScreen() {
 
   // ─── BURST PHOTOS + LOCATION ──────────────────────────────────────────────
 
-  async function capturePhotosAndLocation() {
+  async function capturePhotosAndLocation(audioUri) {
     setPhase('capturing');
     setStatusMsg('📸 Capturing scene photos...');
 
@@ -182,19 +183,34 @@ export default function SOSScreen() {
       console.warn('Location error:', err.message);
     }
 
-    await runTriage(capturedPhotos, loc);
+    await runTriage(audioUri, capturedPhotos, loc);
   }
 
   // ─── AI TRIAGE ───────────────────────────────────────────────────────────
 
-  async function runTriage(capturedPhotos, loc) {
+  async function runTriage(audioUri, capturedPhotos, loc) {
     setPhase('analyzing');
     setStatusMsg('🧠 AI analyzing emergency...');
 
     try {
+      // Read audio file as base64
+      let audioBase64 = null;
+      if (audioUri) {
+        audioBase64 = await FileSystem.readAsStringAsync(audioUri, {
+          encoding: 'base64',
+        });
+      }
+
+      const audioInput = audioBase64 ? { 
+        base64: audioBase64, 
+        mimeType: Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4' 
+      } : null;
+
       const imageInputs = capturedPhotos.map(p => ({ base64: p.base64, mimeType: p.mimeType }));
-      const result = await runAITriage(transcript, imageInputs);
+      
+      const result = await runAITriage(audioInput, imageInputs);
       setTriageResult(result);
+      setTranscript(result.transcript);
 
       await submitPacket(result, capturedPhotos, loc);
     } catch (err) {
@@ -347,8 +363,16 @@ export default function SOSScreen() {
               <Text style={styles.severityLabel}>{severity?.label}</Text>
             </View>
 
+            {/* AI Summary and Transcript */}
             <Text style={styles.sectionTitle}>AI Summary</Text>
             <Text style={styles.cardBody}>{triageResult.summary}</Text>
+
+            {triageResult.transcript && (
+              <>
+                <Text style={styles.sectionTitle}>Voice Transcript</Text>
+                <Text style={[styles.cardBody, { fontStyle: 'italic' }]}>"{triageResult.transcript}"</Text>
+              </>
+            )}
 
             {triageResult.injuries?.length > 0 && (
               <>
