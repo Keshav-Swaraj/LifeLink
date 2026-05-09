@@ -18,7 +18,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import NetInfo from '@react-native-community/netinfo';
 import { runAITriage } from '../lib/gemini';
 import { submitEmergency, uploadPhotos } from '../services/emergencyService';
-import { syncQueue } from '../services/offlineQueue';
+import { syncQueue, clearQueue } from '../services/offlineQueue';
 import { useAuth } from '../context/AuthContext';
 import 'react-native-url-polyfill/auto';
 
@@ -214,7 +214,7 @@ export default function SOSScreen() {
       
       const result = await runAITriage(audioInput, imageInputs);
       setTriageResult(result);
-      setTranscript(result.transcript);
+      setTranscript(result.transcript ?? '');
 
       await submitPacket(result, capturedPhotos, loc);
     } catch (err) {
@@ -241,19 +241,43 @@ export default function SOSScreen() {
       }
     }
 
+    // Reverse geocode GPS → human-readable address
+    let address = null;
+    if (loc?.coords) {
+      try {
+        const [place] = await Location.reverseGeocodeAsync({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+        if (place) {
+          address = [
+            place.name,
+            place.street,
+            place.district,
+            place.city,
+            place.region,
+          ].filter(Boolean).join(', ');
+        }
+      } catch (err) {
+        console.warn('Reverse geocode failed:', err.message);
+      }
+    }
+
     const packet = {
-      client_id:         clientId,
-      latitude:          loc?.coords?.latitude  ?? 0,
-      longitude:         loc?.coords?.longitude ?? 0,
-      voice_transcript:  transcript,
-      photo_urls:        photoUrls,
-      severity:          triageData.severity,
-      ai_summary:        triageData.summary,
-      ai_injuries:       triageData.injuries,
-      ai_risks:          triageData.risks,
+      client_id:          clientId,
+      latitude:           loc?.coords?.latitude  ?? 0,
+      longitude:          loc?.coords?.longitude ?? 0,
+      address,
+      // Use triageData.transcript directly — avoid stale React state
+      voice_transcript:   triageData.transcript ?? '',
+      photo_urls:         photoUrls,
+      severity:           triageData.severity,
+      ai_summary:         triageData.summary,
+      ai_injuries:        triageData.injuries,
+      ai_risks:           triageData.risks,
       ai_recommendations: triageData.recommendations,
-      ai_raw_response:   triageData.raw,
-      status:            'pending',
+      ai_raw_response:    triageData.raw,
+      status:             'pending',
     };
 
     const outcome = await submitEmergency(packet, isOnline);
@@ -300,9 +324,19 @@ export default function SOSScreen() {
             <Text style={styles.appTitle}>LifeLink</Text>
             <Text style={styles.appSubtitle}>Golden Hour, Powered by AI</Text>
           </View>
-          <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-            <Text style={styles.logoutBtnText}>Sign Out</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {__DEV__ && (
+              <TouchableOpacity
+                style={[styles.logoutBtn, { backgroundColor: '#1C1C1E' }]}
+                onPress={async () => { await clearQueue(); Alert.alert('Queue cleared'); }}
+              >
+                <Text style={[styles.logoutBtnText, { color: '#FF9500', fontSize: 11 }]}>Clear Queue</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+              <Text style={styles.logoutBtnText}>Sign Out</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ── IDLE: Big SOS Button ── */}
@@ -344,7 +378,7 @@ export default function SOSScreen() {
             <Text style={styles.statusText}>{statusMsg}</Text>
 
             {/* Live camera preview */}
-            {phase === 'capturing' && (
+            {['recording', 'capturing'].includes(phase) && (
               <View style={styles.cameraContainer}>
                 <CameraView
                   ref={cameraRef}

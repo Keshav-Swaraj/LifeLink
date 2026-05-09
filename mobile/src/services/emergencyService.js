@@ -1,5 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { enqueueEmergency } from './offlineQueue';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
 import 'react-native-url-polyfill/auto';
 
 /**
@@ -15,13 +17,12 @@ export async function uploadPhotos(photoUris, emergencyId) {
     const uri = photoUris[i];
     const fileName = `${emergencyId}/photo_${i + 1}.jpg`;
 
-    // Fetch the image as a blob
-    const response = await fetch(uri);
-    const blob = await response.blob();
+    // Read the image as base64
+    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
 
     const { error } = await supabase.storage
       .from('emergency-media')
-      .upload(fileName, blob, { contentType: 'image/jpeg', upsert: true });
+      .upload(fileName, decode(base64), { contentType: 'image/jpeg', upsert: true });
 
     if (error) {
       console.error(`[EmergencyService] Failed to upload photo ${i + 1}:`, error.message);

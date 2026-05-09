@@ -28,6 +28,7 @@ import ProfessionalDetailsScreen from '../screens/medical/ProfessionalDetailsScr
 import MainPlaceholderScreen from '../screens/MainPlaceholderScreen';
 import UserLoginScreen from '../screens/user/UserLoginScreen';
 import UserSignupScreen from '../screens/user/UserSignupScreen';
+import UnifiedSignupScreen from '../screens/UnifiedSignupScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
 
 // ── Route Map ─────────────────────────────────────────────────
@@ -46,6 +47,9 @@ export type RootStackParamList = {
   ProfessionalDetails: undefined;
   DocumentUpload: undefined;
 
+  // Unified Signup (both roles)
+  UnifiedSignup: { role: 'user' | 'medical_professional' };
+
   // Main App (placeholder — replace with your navigator)
   MainApp: undefined;
 };
@@ -55,6 +59,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 // ── Auth Stack (unauthenticated) ──────────────────────────────
 const AuthStack: React.FC = () => (
   <Stack.Navigator
+    id="AuthStack"
     screenOptions={{
       headerShown: false,
       animation: 'slide_from_right',
@@ -73,6 +78,9 @@ const AuthStack: React.FC = () => (
     <Stack.Screen name="MedicalSignup" component={MedicalSignupScreen} />
     <Stack.Screen name="ProfessionalDetails" component={ProfessionalDetailsScreen} />
     <Stack.Screen name="DocumentUpload" component={DocumentUploadScreen} />
+
+    {/* Unified Signup (shared by both roles) */}
+    <Stack.Screen name="UnifiedSignup" component={UnifiedSignupScreen} />
   </Stack.Navigator>
 );
 
@@ -81,6 +89,7 @@ const AuthStack: React.FC = () => (
 // completed Step 2 (Professional Details) and Step 3 (Upload).
 const OnboardingStack: React.FC = () => (
   <Stack.Navigator
+    id="OnboardingStack"
     screenOptions={{
       headerShown: false,
       animation: 'slide_from_right',
@@ -101,7 +110,7 @@ const OnboardingStack: React.FC = () => (
 
 // ── Main App Stack (fully authenticated) ─────────────────────
 const AppStack: React.FC = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
+  <Stack.Navigator id="AppStack" screenOptions={{ headerShown: false }}>
     <Stack.Screen name="MainApp" component={MainPlaceholderScreen} />
     {/* Other members: add your screens here, or replace this entire stack */}
   </Stack.Navigator>

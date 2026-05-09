@@ -9,7 +9,7 @@
 //   - refreshProfile, signOut (legacy alias for logout)
 // ============================================================
 
-import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -19,6 +19,8 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);   // Supabase auth user
   const [profile, setProfile] = useState(null); // DB profile from 'users' table
   const [loading, setLoading] = useState(true);
+  // Flag to prevent onAuthStateChange from overwriting profile during signup
+  const signingUpRef = useRef(false);
 
   useEffect(() => {
     // Check active Supabase session
@@ -31,6 +33,8 @@ export const AuthProvider = ({ children }) => {
     // Listen for auth changes (login / logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      // Skip auto profile fetch during signup — signUpUser/signUpMedical handle it
+      if (signingUpRef.current) return;
       if (session?.user) fetchProfile(session.user.id);
       else {
         setProfile(null);
@@ -64,6 +68,7 @@ export const AuthProvider = ({ children }) => {
 
   // ── Sign up a regular user (victim / bystander) ───────────────
   const signUpUser = useCallback(async (data) => {
+    signingUpRef.current = true;
     setLoading(true);
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -71,33 +76,40 @@ export const AuthProvider = ({ children }) => {
         password: data.password,
       });
       if (authError) throw authError;
-      if (!authData.user) throw new Error('Sign up failed');
+      if (!authData.user) throw new Error('Sign up failed — no user returned. Check Supabase email confirmation settings.');
 
       const profileData = {
         id: authData.user.id,
         email: data.email,
         phone: data.phone,
         full_name: data.full_name,
-        role: 'user',
+        role: 'victim',          // matches user_role enum in DB
         is_verified_medical: false,
         onboarding_complete: true,
       };
 
       const { error: dbError } = await supabase.from('users').insert(profileData);
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error('[AuthContext] DB insert error (user):', dbError.message, dbError.details);
+        throw new Error(dbError.message);
+      }
 
+      setUser(authData.user);
       setProfile(profileData);
       await AsyncStorage.setItem('@lifelink_user', JSON.stringify(profileData));
       return { error: null };
     } catch (err) {
+      console.error('[AuthContext] signUpUser error:', err.message);
       return { error: err.message };
     } finally {
+      signingUpRef.current = false;
       setLoading(false);
     }
   }, []);
 
   // ── Sign up a medical professional (responder) ────────────────
   const signUpMedical = useCallback(async (data) => {
+    signingUpRef.current = true;
     setLoading(true);
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -105,7 +117,7 @@ export const AuthProvider = ({ children }) => {
         password: data.password,
       });
       if (authError) throw authError;
-      if (!authData.user) throw new Error('Sign up failed');
+      if (!authData.user) throw new Error('Sign up failed — no user returned. Check Supabase email confirmation settings.');
 
       const profileData = {
         id: authData.user.id,
@@ -118,14 +130,20 @@ export const AuthProvider = ({ children }) => {
       };
 
       const { error: dbError } = await supabase.from('users').insert(profileData);
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error('[AuthContext] DB insert error (medical):', dbError.message, dbError.details);
+        throw new Error(dbError.message);
+      }
 
+      setUser(authData.user);
       setProfile(profileData);
       await AsyncStorage.setItem('@lifelink_user', JSON.stringify(profileData));
       return { error: null };
     } catch (err) {
+      console.error('[AuthContext] signUpMedical error:', err.message);
       return { error: err.message };
     } finally {
+      signingUpRef.current = false;
       setLoading(false);
     }
   }, []);

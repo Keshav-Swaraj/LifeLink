@@ -127,7 +127,7 @@ const UserLoginScreen: React.FC<Props> = ({ navigation }) => {
           {/* Footer */}
           <View style={styles.footerRow}>
             <Text style={styles.footerText}>Don't have an account?</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('UserSignup')}>
+            <TouchableOpacity onPress={() => navigation.navigate('UnifiedSignup', { role: 'user' })}>
               <Text style={styles.footerLink}>  Sign Up</Text>
             </TouchableOpacity>
           </View>

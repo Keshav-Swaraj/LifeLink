@@ -138,7 +138,7 @@ const MedicalLoginScreen: React.FC<Props> = ({ navigation }) => {
           {/* Footer links */}
           <View style={styles.footerRow}>
             <Text style={styles.footerText}>New to LifeLink?</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('MedicalSignup')}>
+            <TouchableOpacity onPress={() => navigation.navigate('UnifiedSignup', { role: 'medical_professional' })}>
               <Text style={styles.footerLink}>  Register as Medical</Text>
             </TouchableOpacity>
           </View>

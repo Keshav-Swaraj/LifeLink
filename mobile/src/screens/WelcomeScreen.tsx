@@ -72,7 +72,7 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
           Who are you joining as?
         </Text>
         <Text style={styles.subtitleSub}>
-          Your path determines the level of access and features you receive.
+          Both paths give you SOS access. Medical professionals additionally receive and respond to emergency alerts.
         </Text>
 
         {/* Path Cards */}
@@ -87,9 +87,9 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.cardIcon}>🙋</Text>
             </View>
             <View style={styles.cardTextContainer}>
-              <Text style={styles.cardTitle}>I Need Help</Text>
-              <Text style={styles.cardSubtitle}>User · Bystander</Text>
-              <Text style={styles.cardDesc}>Trigger SOS, find nearby responders, and get connected to hospitals quickly.</Text>
+              <Text style={styles.cardTitle}>Regular User</Text>
+              <Text style={styles.cardSubtitle}>Any profession · Bystander</Text>
+              <Text style={styles.cardDesc}>Trigger SOS in an emergency, alert nearby responders, and get connected to hospitals fast.</Text>
             </View>
             <View style={styles.cardArrow}>
               <Text style={styles.cardArrowText}>›</Text>
@@ -106,11 +106,11 @@ const WelcomeScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.cardIcon}>🩺</Text>
             </View>
             <View style={styles.cardTextContainer}>
-              <Text style={styles.cardTitle}>I Can Help</Text>
+              <Text style={styles.cardTitle}>Medical Professional / Student</Text>
               <Text style={[styles.cardSubtitle, styles.cardSubtitleMedical]}>
-                Doctor · Nurse · Paramedic
+                Doctor · Nurse · Paramedic · Med Student
               </Text>
-              <Text style={styles.cardDesc}>Respond to verified emergencies near you as a certified medical professional.</Text>
+              <Text style={styles.cardDesc}>Get SOS access plus respond to verified emergencies near you as a certified professional.</Text>
             </View>
             <View style={styles.cardArrow}>
               <Text style={[styles.cardArrowText, { color: Colors.primaryLight }]}>›</Text>

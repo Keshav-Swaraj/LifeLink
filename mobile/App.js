@@ -17,6 +17,7 @@ import MedicalLoginScreen from './src/screens/medical/MedicalLoginScreen';
 import MedicalSignupScreen from './src/screens/medical/MedicalSignupScreen';
 import ProfessionalDetailsScreen from './src/screens/medical/ProfessionalDetailsScreen';
 import DocumentUploadScreen from './src/screens/medical/DocumentUploadScreen';
+import UnifiedSignupScreen from './src/screens/UnifiedSignupScreen';
 
 // ── Victim Screens (Member 1) ────────────────────────────────────
 import SOSScreen from './src/screens/SOSScreen';
@@ -54,10 +55,14 @@ function RootStack() {
       .channel('public:emergencies:pending-inserts')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'emergencies', filter: 'status=eq.pending' },
+        // NOTE: Supabase Realtime filters require explicit column setup in the dashboard.
+        // Filter client-side instead to guarantee delivery.
+        { event: 'INSERT', schema: 'public', table: 'emergencies' },
         payload => {
           const newRow = payload.new;
           if (!newRow) return;
+          // Only show popup for pending emergencies
+          if (newRow.status !== 'pending') return;
           setModalEmergency(newRow);
           setModalVisible(true);
         },
@@ -114,7 +119,7 @@ function RootStack() {
     <>
       <Stack.Navigator screenOptions={SCREEN_OPTIONS}>
         {!isAuthenticated ? (
-          // ── Unauthenticated: Auth flow (Member 4) ──────────────────
+          // ── Unauthenticated: Auth flow ──────────────────────────────
           <>
             <Stack.Screen name="Welcome" component={WelcomeScreen} />
             <Stack.Screen name="UserLogin" component={UserLoginScreen} />
@@ -123,15 +128,11 @@ function RootStack() {
             <Stack.Screen name="MedicalSignup" component={MedicalSignupScreen} />
             <Stack.Screen name="ProfessionalDetails" component={ProfessionalDetailsScreen} />
             <Stack.Screen name="DocumentUpload" component={DocumentUploadScreen} />
+            {/* Unified signup — shared by both roles */}
+            <Stack.Screen name="UnifiedSignup" component={UnifiedSignupScreen} />
           </>
-        ) : isMedical && !onboardingComplete ? (
-          // ── Medical professional completing onboarding ──────────────
-          <>
-            <Stack.Screen name="ProfessionalDetails" component={ProfessionalDetailsScreen} />
-            <Stack.Screen name="DocumentUpload" component={DocumentUploadScreen} />
-          </>
-        ) : isMedical ? (
-          // ── Fully onboarded medical professional / responder ────────
+        ) : isMedical && onboardingComplete ? (
+          // ── Fully onboarded medical professional / responder ─────────
           <>
             <Stack.Screen name="ResponderHome" component={ResponderDashboard} />
             <Stack.Screen name="EmergencyDetail" component={EmergencyDetailScreen} />
@@ -140,7 +141,8 @@ function RootStack() {
             <Stack.Screen name="ResponderProfileScreen" component={ResponderProfileScreen} />
           </>
         ) : (
-          // ── Regular user / victim ───────────────────────────────────
+          // ── Regular user OR new medical signup (onboarding pending) ──
+          // Both land on the SOS home screen after signup.
           <Stack.Screen name="SOS" component={SOSScreen} />
         )}
       </Stack.Navigator>

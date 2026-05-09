@@ -25,7 +25,7 @@ export default function ResponderProfileScreen() {
       try {
         const {data: userResp, error: userErr} = await supabase.auth.getUser();
         if (userErr) throw userErr;
-        const userId = userResp.data?.user?.id;
+        const userId = userResp.user?.id;
         if (!userId) throw new Error('Not authenticated');
 
         const {data: profileData, error: profileErr} = await supabase
@@ -44,7 +44,7 @@ export default function ResponderProfileScreen() {
 
         if (!mounted) return;
         setProfile(profileData ?? null);
-        setResponsesCount(typeof count === 'number' ? count : Array.isArray(countData) ? countData.length : 0);
+        setResponsesCount(typeof count === 'number' ? count : Array.isArray(countData) ? (countData as unknown[]).length : 0);
       } catch (e) {
         console.warn('Failed to load profile', e);
       } finally {

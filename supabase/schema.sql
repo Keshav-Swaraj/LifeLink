@@ -10,6 +10,16 @@ CREATE TYPE severity_level AS ENUM ('red', 'orange', 'yellow', 'unknown');
 CREATE TYPE emergency_status AS ENUM ('pending', 'dispatched', 'resolved', 'cancelled');
 CREATE TYPE response_status AS ENUM ('accepted', 'rejected', 'on_the_way', 'arrived');
 
+-- ─── HOSPITALS TABLE ───────────────────────────────────────────
+
+CREATE TABLE public.hospitals (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL,
+  latitude    DOUBLE PRECISION NOT NULL,
+  longitude   DOUBLE PRECISION NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ─── USERS TABLE ─────────────────────────────────────────────
 -- Extends Supabase Auth (auth.users). One row per user.
 
@@ -98,6 +108,14 @@ CREATE INDEX idx_responses_responder ON public.emergency_responses(responder_id)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.emergencies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.emergency_responses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.hospitals ENABLE ROW LEVEL SECURITY;
+
+-- Hospitals: allow public read and insert for the demo
+CREATE POLICY "Public can view hospitals"
+  ON public.hospitals FOR SELECT USING (true);
+
+CREATE POLICY "Public can insert hospitals"
+  ON public.hospitals FOR INSERT WITH CHECK (true);
 
 -- Users: can read/update their own profile
 CREATE POLICY "Users can view own profile"
@@ -152,3 +170,21 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.emergency_responses;
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('emergency-media', 'emergency-media', false)
 ON CONFLICT DO NOTHING;
+
+-- ─── STORAGE RLS POLICIES ─────────────────────────────────────
+-- RLS is already enabled on storage.objects by Supabase by default.
+
+-- Allow authenticated users to upload files to the emergency-media bucket
+CREATE POLICY "Allow authenticated uploads"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'emergency-media');
+
+-- Allow authenticated users to view files in the emergency-media bucket
+CREATE POLICY "Allow authenticated views"
+ON storage.objects FOR SELECT TO authenticated
+USING (bucket_id = 'emergency-media');
+
+-- Allow authenticated users to update their files
+CREATE POLICY "Allow authenticated updates"
+ON storage.objects FOR UPDATE TO authenticated
+USING (bucket_id = 'emergency-media');

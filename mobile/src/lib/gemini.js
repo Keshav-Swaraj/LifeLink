@@ -88,6 +88,7 @@ Respond ONLY with this JSON format, no markdown, no explanation:
     injuries: parsed.injuries || [],
     risks: parsed.risks || [],
     recommendations: parsed.recommendations || [],
+    transcript: parsed.transcript || '',
     raw: parsed,
   };
 }
