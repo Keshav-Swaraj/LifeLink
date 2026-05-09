@@ -13,11 +13,11 @@ import { Audio } from 'expo-av';
 import { CameraView } from 'expo-camera';
 import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
-// expo-image-manipulator removed — using low-quality capture instead
+// ImageManipulator removed due to SDK 54 compatibility issue
 import NetInfo from '@react-native-community/netinfo';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, Circle, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Speech from 'expo-speech';
 
 import { runAITriage } from '../lib/groq';
@@ -63,6 +63,29 @@ export default function ActiveSOSScreen() {
   const [trackingStatus, setTrackingStatus]   = useState('pending');
   const [responderCoords, setResponderCoords] = useState(null);
   const trackingChannelRef = useRef(null);
+  const [routeCoords, setRouteCoords] = useState(null);
+  const [etaMinutes, setEtaMinutes] = useState(null);
+
+  useEffect(() => {
+    if (incidentLoc?.coords && responderCoords && phase === 'tracking') {
+      const fetchRoute = async () => {
+        try {
+          const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${responderCoords.longitude},${responderCoords.latitude};${incidentLoc.coords.longitude},${incidentLoc.coords.latitude}?overview=full&geometries=geojson`);
+          const data = await res.json();
+          if (data.routes && data.routes.length > 0) {
+            setRouteCoords(data.routes[0].geometry.coordinates.map(c => ({ latitude: c[1], longitude: c[0] })));
+            setEtaMinutes(Math.ceil(data.routes[0].duration / 60));
+          } else {
+            setRouteCoords(null);
+          }
+        } catch (err) {
+          console.error("OSRM fetch error", err);
+          setRouteCoords(null);
+        }
+      };
+      fetchRoute();
+    }
+  }, [incidentLoc, responderCoords, phase]);
 
   useEffect(() => {
     const unsub = NetInfo.addEventListener(state => {
@@ -133,11 +156,12 @@ export default function ActiveSOSScreen() {
       for (let i = 0; i < 2; i++) { // 2 photos, very low quality to stay under Groq limit
         if (cameraRef.current) {
           const photo = await cameraRef.current.takePictureAsync({
-            quality: 0.2,   // ~50-80KB per photo at this quality
+            quality: 0.1, // Aggressive compression
             base64: true,
-            skipProcessing: true,
+            skipProcessing: false, // Must be false on Android for 'quality' to apply!
             exif: false,
           });
+          
           capturedPhotos.push({ uri: photo.uri, base64: photo.base64, mimeType: 'image/jpeg' });
           setStatusMsg(`📸 Captured ${i + 1}/2 photos...`);
           await new Promise(r => setTimeout(r, 400));
@@ -504,6 +528,14 @@ export default function ActiveSOSScreen() {
                     </View>
                   </Marker>
                 )}
+                {routeCoords && (
+                  <Polyline
+                    coordinates={routeCoords}
+                    strokeColor="#0A84FF"
+                    strokeWidth={4}
+                    lineDashPattern={[8, 6]}
+                  />
+                )}
               </MapView>
 
               <View style={styles.trackingLegend}>
@@ -520,18 +552,12 @@ export default function ActiveSOSScreen() {
               </View>
             </View>
 
-            {triageResult && (
-              <View style={[styles.card, { marginTop: 12 }]}>
-                <Text style={styles.sectionTitle}>AI Summary</Text>
-                <Text style={styles.cardBody}>{triageResult.summary}</Text>
-                {triageResult.recommendations?.length > 0 && (
-                  <>
-                    <Text style={[styles.sectionTitle, { marginTop: 12 }]}>First Aid While Waiting</Text>
-                    {triageResult.recommendations.slice(0, 3).map((rec, i) => (
-                      <Text key={i} style={styles.listItem}>• {rec}</Text>
-                    ))}
-                  </>
-                )}
+            {etaMinutes !== null && (
+              <View style={[styles.card, { marginTop: 12, alignItems: 'center' }]}>
+                <Text style={styles.sectionTitle}>Estimated Time of Arrival</Text>
+                <Text style={{ fontSize: 36, fontWeight: '900', color: '#34C759', marginTop: 8 }}>
+                  {etaMinutes} min
+                </Text>
               </View>
             )}
 

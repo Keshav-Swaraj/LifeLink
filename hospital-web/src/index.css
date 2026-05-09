@@ -52,14 +52,23 @@ body {
 .main-content {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr 300px;
+  grid-template-columns: 550px 1fr;
   overflow: hidden;
 }
 
-.map-section {
-  padding: 40px 40px 40px 0;
+.left-panel {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid #1C1C1E;
+}
+
+.map-section {
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .map-wrapper-container {
@@ -70,18 +79,27 @@ body {
 }
 
 .feed-container {
-  padding: 40px;
+  padding: 24px 40px;
   overflow-y: auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-  gap: 24px;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .stats-sidebar {
-  border-left: 1px solid #1C1C1E;
   background-color: #0D0D14;
-  padding: 30px;
+  padding: 30px 40px;
+}
+
+.stats-horizontal {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #1C1C1E;
+  padding: 24px 40px;
+}
+.stats-horizontal .stat-item {
+  margin-bottom: 0;
 }
 
 .emergency-card {
@@ -92,6 +110,7 @@ body {
   display: flex;
   flex-direction: column;
   transition: transform 0.2s;
+  flex-shrink: 0;
 }
 
 .emergency-card:hover {
