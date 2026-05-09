@@ -44,6 +44,12 @@ export async function uploadPhotos(photoUris, emergencyId) {
  * @param {boolean} isOnline
  */
 export async function submitEmergency(packet, isOnline) {
+  // Ensure user_id is attached to pass RLS policy
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user && !packet.user_id) {
+    packet.user_id = user.id;
+  }
+
   if (!isOnline) {
     console.log('[EmergencyService] Offline — adding to local queue.');
     await enqueueEmergency(packet);

@@ -14,11 +14,12 @@ import {
 import { Audio } from 'expo-av';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import NetInfo from '@react-native-community/netinfo';
 import { runAITriage } from '../lib/gemini';
 import { submitEmergency, uploadPhotos } from '../services/emergencyService';
 import { syncQueue } from '../services/offlineQueue';
+import { useAuth } from '../context/AuthContext';
 import 'react-native-url-polyfill/auto';
 
 const { width } = Dimensions.get('window');
@@ -31,6 +32,7 @@ const SEVERITY_CONFIG = {
 };
 
 export default function SOSScreen() {
+  const { logout } = useAuth();
   // Permissions
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [micGranted, setMicGranted]   = useState(false);
@@ -142,7 +144,9 @@ export default function SOSScreen() {
       // Store the URI for later processing
       await capturePhotosAndLocation(uri);
     } catch (err) {
-      console.error('Stop recording error:', err);
+      if (err.message && !err.message.includes('already been unloaded')) {
+        console.error('Stop recording error:', err);
+      }
     }
   }
 
@@ -291,8 +295,15 @@ export default function SOSScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
-        <Text style={styles.appTitle}>LifeLink</Text>
-        <Text style={styles.appSubtitle}>Golden Hour, Powered by AI</Text>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.appTitle}>LifeLink</Text>
+            <Text style={styles.appSubtitle}>Golden Hour, Powered by AI</Text>
+          </View>
+          <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+            <Text style={styles.logoutBtnText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* ── IDLE: Big SOS Button ── */}
         {phase === 'idle' && (
@@ -447,8 +458,25 @@ const styles = StyleSheet.create({
   appSubtitle: {
     fontSize: 13,
     color: '#8E8E93',
-    marginBottom: 40,
     letterSpacing: 1,
+  },
+  headerRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  logoutBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#2C2C2E',
+    borderRadius: 8,
+  },
+  logoutBtnText: {
+    color: '#FF2D55',
+    fontWeight: '700',
+    fontSize: 14,
   },
   centerBlock: {
     alignItems: 'center',

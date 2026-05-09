@@ -33,13 +33,22 @@ export async function syncQueue() {
 
   console.log('[OfflineQueue] Syncing', queue.length, 'queued emergencies...');
 
+  const { data: { user } } = await supabase.auth.getUser();
+
   let synced = 0;
   let failed = 0;
   const remaining = [];
 
   for (const packet of queue) {
     try {
-      const { error } = await supabase.from('emergencies').upsert(packet, {
+      const { queuedAt, ...dbPacket } = packet;
+      
+      // Inject user_id if missing to fix RLS for legacy queued items
+      if (!dbPacket.user_id && user) {
+        dbPacket.user_id = user.id;
+      }
+
+      const { error } = await supabase.from('emergencies').upsert(dbPacket, {
         onConflict: 'client_id',
         ignoreDuplicates: true,
       });
